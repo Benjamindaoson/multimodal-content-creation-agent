@@ -217,3 +217,73 @@ async def test_incomplete_chunk_extraction_is_rebuilt(tmp_path, monkeypatch):
     assert first == second
     assert first[0][1] == 0.0
     assert (chunk_dir / ".complete").is_file()
+
+
+@pytest.mark.asyncio
+async def test_batch_export_archives_selected_clips_and_persists_progress(
+    tmp_path, monkeypatch
+):
+    import asyncio
+    import zipfile
+
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"test")
+    state = fake_state(source)
+    state["status"] = "ready"
+    state["metrics"]["has_video"] = True
+    state["clips"] = [
+        {"clip_id": "first", "start": 1.0, "end": 20.0},
+        {"clip_id": "second", "start": 20.0, "end": 40.0},
+    ]
+    store = MemoryStore(state)
+    service = runtime.VideoRepurposingService(store=store)
+    calls = []
+
+    async def fake_export(**kwargs):
+        calls.append(kwargs["destination"].name)
+        kwargs["destination"].parent.mkdir(exist_ok=True)
+        kwargs["destination"].write_bytes(b"mp4:" + kwargs["destination"].name.encode())
+        return kwargs["destination"]
+
+    monkeypatch.setattr(runtime, "export_clip", fake_export)
+    batch_id = await service.submit_batch_export(
+        "repurpose_test", ["first", "second"]
+    )
+    task = service.batch_tasks[batch_id]
+    await asyncio.wait_for(task, timeout=5)
+    updated = store.state["batch_exports"][batch_id]
+    assert updated["status"] == "completed"
+    assert updated["completed"] == 2
+    assert updated["bytes"] > 0
+    assert calls == ["first.mp4", "second.mp4"]
+    archive = tmp_path / "exports" / (batch_id + ".zip")
+    with zipfile.ZipFile(archive) as zipped:
+        assert zipped.namelist() == ["first.mp4", "second.mp4"]
+        assert zipped.read("first.mp4") == b"mp4:first.mp4"
+
+    with pytest.raises(ValueError, match="unique"):
+        await service.submit_batch_export("repurpose_test", ["first", "first"])
+    with pytest.raises(ValueError, match="not in this job"):
+        await service.submit_batch_export("repurpose_test", ["not-owned"])
+
+
+@pytest.mark.asyncio
+async def test_batch_download_rejects_non_owner(tmp_path, monkeypatch):
+    source = tmp_path / "source.mp4"
+    source.write_bytes(b"test")
+    state = fake_state(source)
+    state["batch_exports"] = {
+        "batch_safe": {"status": "completed", "total": 1, "completed": 1}
+    }
+    monkeypatch.setattr(
+        api,
+        "get_video_repurposing_service",
+        lambda: SimpleNamespace(store=MemoryStore(state)),
+    )
+    with pytest.raises(HTTPException) as exc:
+        await api.download_batch(
+            "repurpose_test",
+            "batch_safe",
+            current_user=SimpleNamespace(id="bob", role=UserRole.USER),
+        )
+    assert exc.value.status_code == 403
