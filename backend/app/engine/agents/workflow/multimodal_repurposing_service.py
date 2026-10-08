@@ -331,7 +331,7 @@ class VideoRepurposingService:
             if not files or any(not item.stat().st_size for item in files):
                 raise RuntimeError("FFmpeg produced no complete audio chunks")
             offsets = parse_ffmpeg_segment_manifest(manifest, files)
-            marker.write_text("complete\\n", encoding="utf-8")
+            marker.write_text("complete\n", encoding="utf-8")
             return offsets
         return parse_ffmpeg_segment_manifest(manifest, files)
 

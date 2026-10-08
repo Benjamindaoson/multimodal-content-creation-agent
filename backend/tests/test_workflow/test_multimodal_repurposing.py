@@ -72,9 +72,9 @@ def test_manifest_offsets_are_from_timeline_not_encoded_file_duration(tmp_path):
         item.write_bytes(b"fake")
     manifest = tmp_path / "segments.csv"
     manifest.write_text(
-        "chunk_0000.mp3,0.000000,600.009000\\n"
-        "chunk_0001.mp3,600.009000,1200.018000\\n"
-        "chunk_0002.mp3,1200.018000,1312.000000\\n",
+        "chunk_0000.mp3,0.000000,600.009000\n"
+        "chunk_0001.mp3,600.009000,1200.018000\n"
+        "chunk_0002.mp3,1200.018000,1312.000000\n",
         encoding="utf-8",
     )
     result = parse_ffmpeg_segment_manifest(manifest, files)
@@ -85,9 +85,9 @@ def test_manifest_rejects_mismatched_chunk_or_invalid_timestamp(tmp_path):
     chunk = tmp_path / "chunk_0000.mp3"
     chunk.write_bytes(b"fake")
     manifest = tmp_path / "segments.csv"
-    manifest.write_text("wrong.mp3,0,10\\n", encoding="utf-8")
+    manifest.write_text("wrong.mp3,0,10\n", encoding="utf-8")
     with pytest.raises(ValueError, match="misordered"):
         parse_ffmpeg_segment_manifest(manifest, [chunk])
-    manifest.write_text("chunk_0000.mp3,nan,10\\n", encoding="utf-8")
+    manifest.write_text("chunk_0000.mp3,nan,10\n", encoding="utf-8")
     with pytest.raises(ValueError, match="invalid"):
         parse_ffmpeg_segment_manifest(manifest, [chunk])

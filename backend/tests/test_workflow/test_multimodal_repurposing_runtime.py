@@ -198,7 +198,7 @@ async def test_incomplete_chunk_extraction_is_rebuilt(tmp_path, monkeypatch):
             calls.append("encode")
             stale.write_bytes(b"complete-audio")
             (chunk_dir / "segments.csv").write_text(
-                "chunk_0000.mp3,0.000000,15.000000\\n", encoding="utf-8"
+                "chunk_0000.mp3,0.000000,15.000000\n", encoding="utf-8"
             )
             return ""
         return '{"format": {"duration": "15.0"}}'
