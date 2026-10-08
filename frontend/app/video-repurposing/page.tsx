@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface Clip {
   clip_id: string;
@@ -63,6 +63,31 @@ export default function VideoRepurposingPage() {
   const [exporting, setExporting] = useState('');
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewClip, setPreviewClip] = useState<Clip | null>(null);
+
+  useEffect(() => {
+    if (!file || !['mp4', 'mov', 'webm', 'mkv'].includes(file.name.split('.').pop()?.toLowerCase() || '')) {
+      setPreviewUrl('');
+      return;
+    }
+    // The browser accesses only the original user-selected file. No extra
+    // multi-GB HTTP transfer or browser-side full-file conversion is needed.
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  function playCandidate(clip: Clip) {
+    setPreviewClip(clip);
+    const player = videoRef.current;
+    if (player && player.readyState >= 1) {
+      player.currentTime = clip.start;
+      void player.play().catch(() => {});
+    }
+  }
+
 
   useEffect(() => {
     setJobId(window.localStorage.getItem('last_repurposing_job_id') || '');
@@ -202,7 +227,32 @@ export default function VideoRepurposingPage() {
             </div>
             {job?.status === 'ready' && <span className="text-sm text-sky-300">{job.clips.length} 个候选</span>}
           </div>
-          {!job && <div className="rounded-2xl border border-white/10 p-12 text-center text-white/40">选择视频后开始分析，结果会显示在这里。</div>}
+          {previewUrl && (
+            <div className="overflow-hidden rounded-2xl border border-white/10 bg-black">
+              <video
+                ref={videoRef}
+                src={previewUrl}
+                controls
+                preload="metadata"
+                playsInline
+                className="aspect-video w-full"
+                onLoadedMetadata={(event) => {
+                  if (previewClip) event.currentTarget.currentTime = previewClip.start;
+                }}
+                onTimeUpdate={(event) => {
+                  if (previewClip && event.currentTarget.currentTime >= previewClip.end) {
+                    event.currentTarget.pause();
+                  }
+                }}
+              />
+              <div className="px-4 py-3 text-sm text-white/50">
+                {previewClip
+                  ? '片段预览：' + previewClip.title + '（浏览器本地原视频）'
+                  : '浏览器本地预览。选择右侧片段后将跳转至对应开始时间。'}
+              </div>
+            </div>
+          )}
+                    {!job && <div className="rounded-2xl border border-white/10 p-12 text-center text-white/40">选择视频后开始分析，结果会显示在这里。</div>}
           {job?.status === 'ready' && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {[
@@ -228,10 +278,21 @@ export default function VideoRepurposingPage() {
                     <span className="ml-3 text-white/40">质量评分 {Math.round(clip.score * 100)}%</span>
                   </p>
                 </div>
-                <button disabled={Boolean(exporting)} onClick={() => void exportOne(clip)}
+                <div className="flex gap-2">
+                  {previewUrl && (
+                    <button
+                      type="button"
+                      onClick={() => playCandidate(clip)}
+                      className="rounded-lg border border-white/20 px-3 py-2 text-sm text-white/80 hover:border-sky-400"
+                    >
+                      本地预览
+                    </button>
+                  )}
+                  <button disabled={Boolean(exporting)} onClick={() => void exportOne(clip)}
                   className="rounded-lg border border-sky-400/30 px-3 py-2 text-sm text-sky-300 disabled:opacity-40">
                   {exporting === clip.clip_id ? '正在生成 MP4…' : '导出 MP4'}
-                </button>
+                  </button>
+                </div>
               </div>
               <p className="mt-3 text-sm text-white/70">{clip.reason}</p>
               <p className="mt-3 rounded-lg bg-black/30 p-3 text-xs text-white/40">ASR 证据：{clip.evidence_excerpt}</p>
