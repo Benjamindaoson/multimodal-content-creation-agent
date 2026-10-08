@@ -32,7 +32,7 @@ def test_windows_overlap_and_terminate_on_long_segments():
         TranscriptSegment(i * 10, i * 10 + 9, "description " + "x" * 80)
         for i in range(12)
     ]
-    windows = transcript_windows(segments, max_chars=240, overlap_seconds=15)
+    windows = transcript_windows(segments, max_chars=280, overlap_seconds=15)
     assert len(windows) > 1
     assert windows[0][-1] in windows[1]
     assert windows[-1][-1] == segments[-1]

@@ -24,6 +24,7 @@ ROUTE_DEFINITIONS = [
     ("app.api.v1.api_v4_rag", False, {}),
     ("app.api.v1.api_v5_langgraph", True, {}),
     ("app.api.v1.api_multimodal_production", False, {}),
+    ("app.api.v1.api_video_repurposing", False, {}),
     ("app.api.v1.api_ml_training", False, {}),
     ("app.api.v1.api_ml_feedback", False, {}),
     ("app.api.v1.api_data_import", False, {}),

@@ -170,3 +170,7 @@ TIKTOK_ACCESS_TOKEN     # 仅真实发布/指标回收时需要
 ## License
 
 本项目沿用仓库现有许可证；第三方模型、平台 API 和生成内容同时受各供应商条款约束。
+
+## 长视频智能切片 / Long-video repurposing
+
+上传直播回放、分块 Groq ASR、DeepSeek 精彩片段识别、人工审核建议及 FFmpeg 精确导出，作为原生成式生产工作流之外的独立能力。详见 [操作指南](docs/LONG_VIDEO_REPURPOSING.md)。
