@@ -235,6 +235,9 @@ async def test_batch_export_archives_selected_clips_and_persists_progress(
         {"clip_id": "first", "start": 1.0, "end": 20.0},
         {"clip_id": "second", "start": 20.0, "end": 40.0},
     ]
+    state["batch_exports"] = {
+        "batch_interrupted": {"status": "running", "total": 2, "completed": 1}
+    }
     store = MemoryStore(state)
     service = runtime.VideoRepurposingService(store=store)
     calls = []
@@ -249,6 +252,7 @@ async def test_batch_export_archives_selected_clips_and_persists_progress(
     batch_id = await service.submit_batch_export("repurpose_test", ["first", "second"])
     task = service.batch_tasks[batch_id]
     await asyncio.wait_for(task, timeout=5)
+    assert store.state["batch_exports"]["batch_interrupted"]["status"] == "interrupted"
     updated = store.state["batch_exports"][batch_id]
     assert updated["status"] == "completed"
     assert updated["completed"] == 2

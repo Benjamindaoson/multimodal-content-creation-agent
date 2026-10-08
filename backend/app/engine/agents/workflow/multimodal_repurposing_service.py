@@ -510,10 +510,15 @@ class VideoRepurposingService:
             if not set(clip_ids).issubset(available):
                 raise ValueError("selected clip IDs are not in this job")
             batches = state.setdefault("batch_exports", {})
-            if any(
-                value["status"] in {"queued", "running"} for value in batches.values()
-            ):
-                raise ValueError("an export batch is already in progress")
+            for existing_id, previous in batches.items():
+                if previous["status"] not in {"queued", "running"}:
+                    continue
+                active = self.batch_tasks.get(existing_id)
+                if active is not None and not active.done():
+                    raise ValueError("an export batch is already in progress")
+                # A restart loses process-local coroutines; a resubmission
+                # reuses all completed MP4 clips.
+                previous["status"] = "interrupted"
             batch_id = f"batch_{uuid4().hex[:16]}"
             batches[batch_id] = {
                 "status": "queued",

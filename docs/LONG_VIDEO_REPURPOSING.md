@@ -65,3 +65,22 @@ validate quality and measured latency.
 ## Frontend
 
 The independent user interface is located at `/video-repurposing`. It uses the same browser JWT login token as the existing publish page (stored under `localStorage.token`). The UI polls the authenticated task endpoint, supports resume, and exports one selected clip at a time. Run the Next.js frontend with `NEXT_PUBLIC_API_URL` pointing at the FastAPI backend. Client-side FFmpeg.wasm optimization and multi-select batch exports remain future work.
+
+
+## Candidate preview and batch exports
+
+The web studio previews selected time ranges from the user's original video via
+a browser object URL, without an extra full-video download. Preview requires
+the file to remain selected; browser codec support varies.
+
+Authenticated `POST /jobs/{job_id}/exports/batch` accepts JSON
+`{"clip_ids": ["id1", "id2"]}` (1-30 unique clip IDs) and immediately returns
+a `batch_id` (HTTP 202). Poll the parent job's
+`batch_exports[batch_id]` field to track `queued → running → completed/failed`.
+Then download from `GET /jobs/{job_id}/exports/batch/{batch_id}/download`.
+
+After an API process restart, resubmitting the selected clips labels an
+abandoned in-memory batch `interrupted` and reuses previously rendered MP4s.
+This is manual recovery, not automatic worker takeover. For very large ZIPs,
+replace the current authenticated browser Blob download with signed URLs or
+streaming file downloads to avoid browser memory pressure.
