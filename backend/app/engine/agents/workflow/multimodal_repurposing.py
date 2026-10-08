@@ -7,6 +7,7 @@ can be evaluated with recorded transcripts and deterministic tests.
 from __future__ import annotations
 
 import asyncio
+import csv
 import hashlib
 import math
 import re
@@ -49,6 +50,51 @@ def normalize_segments(
             continue
         cleaned.append(TranscriptSegment(round(start, 3), round(end, 3), text))
     return sorted(cleaned, key=lambda s: (s.start, s.end))
+
+
+def parse_ffmpeg_segment_manifest(
+    manifest: Path, chunks: Sequence[Path]
+) -> List[tuple[Path, float]]:
+    """Use FFmpeg's source-timeline segment start PTS instead of MP3 durations.
+
+    The segment muxer emits filename,start,end CSV rows before resetting the
+    timestamps of each individual MP3. Exact input-to-output frame alignment
+    still depends on source media/ASR precision and must be measured.
+    """
+    if not chunks:
+        raise ValueError("no audio chunks")
+    rows: List[tuple[Path, float]] = []
+    with manifest.open("r", encoding="utf-8", newline="") as stream:
+        for raw in csv.reader(stream):
+            if len(raw) != 3:
+                raise ValueError("invalid FFmpeg segment manifest row")
+            name = Path(raw[0]).name
+            if name != raw[0] and not Path(raw[0]).is_absolute():
+                # FFmpeg may emit full output paths; only matching basenames
+                # are used, not arbitrary paths from the manifest.
+                pass
+            try:
+                start, end = float(raw[1]), float(raw[2])
+            except ValueError as exc:
+                raise ValueError("invalid segment timestamp") from exc
+            if (
+                not math.isfinite(start)
+                or not math.isfinite(end)
+                or start < -0.05
+                or end <= start
+            ):
+                raise ValueError("invalid FFmpeg segment time range")
+            rows.append((Path(name), max(0.0, start)))
+    if len(rows) != len(chunks):
+        raise ValueError("FFmpeg segment manifest does not match chunk count")
+    last = -1.0
+    resolved: List[tuple[Path, float]] = []
+    for (name, offset), chunk in zip(rows, chunks):
+        if name.name != chunk.name or offset <= last:
+            raise ValueError("segment manifest has misordered or duplicate chunks")
+        resolved.append((chunk, offset))
+        last = offset
+    return resolved
 
 
 def transcript_windows(
