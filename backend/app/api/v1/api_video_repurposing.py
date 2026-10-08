@@ -145,7 +145,8 @@ async def stream_job(
     # Authenticated fetch streaming is supported; native EventSource cannot
     # send the existing Bearer auth header.
     return StreamingResponse(
-        updates(), media_type="text/event-stream",
+        updates(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
