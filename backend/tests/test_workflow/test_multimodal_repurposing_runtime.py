@@ -246,9 +246,7 @@ async def test_batch_export_archives_selected_clips_and_persists_progress(
         return kwargs["destination"]
 
     monkeypatch.setattr(runtime, "export_clip", fake_export)
-    batch_id = await service.submit_batch_export(
-        "repurpose_test", ["first", "second"]
-    )
+    batch_id = await service.submit_batch_export("repurpose_test", ["first", "second"])
     task = service.batch_tasks[batch_id]
     await asyncio.wait_for(task, timeout=5)
     updated = store.state["batch_exports"][batch_id]

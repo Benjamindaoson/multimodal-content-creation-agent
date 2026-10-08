@@ -511,8 +511,7 @@ class VideoRepurposingService:
                 raise ValueError("selected clip IDs are not in this job")
             batches = state.setdefault("batch_exports", {})
             if any(
-                value["status"] in {"queued", "running"}
-                for value in batches.values()
+                value["status"] in {"queued", "running"} for value in batches.values()
             ):
                 raise ValueError("an export batch is already in progress")
             batch_id = f"batch_{uuid4().hex[:16]}"
@@ -542,7 +541,9 @@ class VideoRepurposingService:
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_suffix(".partial")
         try:
-            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as bundle:
+            with zipfile.ZipFile(
+                temporary, "w", compression=zipfile.ZIP_STORED
+            ) as bundle:
                 for clip_id, path in files:
                     bundle.write(path, arcname=f"{clip_id}.mp4")
             os.replace(temporary, destination)
@@ -562,21 +563,23 @@ class VideoRepurposingService:
             for clip_id in selected:
                 path = await self.export(job_id, clip_id)
                 files.append((clip_id, path))
-                await self._update_batch(
-                    job_id, batch_id, completed=len(files)
-                )
-            archive = (
-                Path(state["source_path"]).parent / "exports" / f"{batch_id}.zip"
-            )
+                await self._update_batch(job_id, batch_id, completed=len(files))
+            archive = Path(state["source_path"]).parent / "exports" / f"{batch_id}.zip"
             size = await asyncio.to_thread(self._make_zip, archive, files)
             await self._update_batch(
-                job_id, batch_id, status="completed", bytes=size,
+                job_id,
+                batch_id,
+                status="completed",
+                bytes=size,
                 elapsed_seconds=round(time.monotonic() - started, 3),
             )
         except Exception as exc:
             logger.exception("repurposing batch %s failed", batch_id)
             await self._update_batch(
-                job_id, batch_id, status="failed", error=str(exc)[:300],
+                job_id,
+                batch_id,
+                status="failed",
+                error=str(exc)[:300],
             )
 
     async def _update_batch(self, job_id: str, batch_id: str, **changes: Any) -> None:

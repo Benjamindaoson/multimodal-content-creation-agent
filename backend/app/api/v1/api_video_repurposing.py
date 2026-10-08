@@ -188,9 +188,7 @@ async def download_batch(
     path = Path(state["source_path"]).parent / "exports" / f"{batch_id}.zip"
     if not path.is_file():
         raise HTTPException(status_code=404, detail="Batch archive is missing")
-    return FileResponse(
-        path, media_type="application/zip", filename=f"{batch_id}.zip"
-    )
+    return FileResponse(path, media_type="application/zip", filename=f"{batch_id}.zip")
 
 
 @router.post("/jobs/{job_id}/clips/{clip_id}/export")
