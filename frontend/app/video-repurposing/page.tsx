@@ -19,6 +19,13 @@ interface Job {
   stage: string;
   progress: number;
   clips: Clip[];
+  batch_exports?: Record<string, {
+    status: string;
+    total: number;
+    completed: number;
+    bytes?: number;
+    error?: string;
+  }>;
   error?: string;
   metrics: {
     duration?: number;
@@ -39,7 +46,7 @@ function authHeaders(): Record<string, string> {
 async function request(path: string, options: RequestInit = {}) {
   const response = await fetch(API + path, {
     ...options,
-    headers: { ...authHeaders() },
+    headers: { ...authHeaders(), ...(options.headers || {}) },
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -63,6 +70,10 @@ export default function VideoRepurposingPage() {
   const [exporting, setExporting] = useState('');
   const [error, setError] = useState('');
   const [revision, setRevision] = useState(0);
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
+  const [batchId, setBatchId] = useState('');
+  const [batchSubmitting, setBatchSubmitting] = useState(false);
+  const [batchDownloading, setBatchDownloading] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
@@ -91,6 +102,7 @@ export default function VideoRepurposingPage() {
 
   useEffect(() => {
     setJobId(window.localStorage.getItem('last_repurposing_job_id') || '');
+    setBatchId(window.localStorage.getItem('last_repurposing_batch_id') || '');
   }, []);
 
   useEffect(() => {
@@ -103,7 +115,9 @@ export default function VideoRepurposingPage() {
         if (stopped) return;
         setJob(result);
         if (result.status === 'failed') setError(result.error || '分析失败，可尝试恢复任务。');
-        if (['ready', 'failed', 'cancelled'].includes(result.status) && timer) clearInterval(timer);
+        const activeBatch = Object.values(result.batch_exports || {})
+          .some((batch) => batch.status === 'queued' || batch.status === 'running');
+        if (['ready', 'failed', 'cancelled'].includes(result.status) && !activeBatch && timer) clearInterval(timer);
       } catch (e) {
         if (!stopped) setError(e instanceof Error ? e.message : '进度查询失败');
       }
@@ -127,6 +141,9 @@ export default function VideoRepurposingPage() {
       data.append('objective', objective);
       const result = await request('/api/v1/video-repurposing/jobs', { method: 'POST', body: data });
       setJob(null);
+      setSelectedClipIds([]);
+      setBatchId('');
+      window.localStorage.removeItem('last_repurposing_batch_id');
       setJobId(result.job_id);
       window.localStorage.setItem('last_repurposing_job_id', result.job_id);
       setRevision((n) => n + 1);
@@ -171,6 +188,55 @@ export default function VideoRepurposingPage() {
       setExporting('');
     }
   }
+
+  async function submitBatch() {
+    if (!jobId || selectedClipIds.length === 0 || batchSubmitting) return;
+    setError('');
+    setBatchSubmitting(true);
+    try {
+      const response = await request(
+        '/api/v1/video-repurposing/jobs/' + encodeURIComponent(jobId) + '/exports/batch',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ clip_ids: selectedClipIds }),
+        }
+      );
+      setBatchId(response.batch_id);
+      window.localStorage.setItem('last_repurposing_batch_id', response.batch_id);
+      setRevision((n) => n + 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '批量导出提交失败');
+    } finally {
+      setBatchSubmitting(false);
+    }
+  }
+
+  async function downloadBatch() {
+    if (!batchId || batchDownloading) return;
+    setBatchDownloading(true);
+    setError('');
+    try {
+      const endpoint = '/api/v1/video-repurposing/jobs/' + encodeURIComponent(jobId)
+        + '/exports/batch/' + encodeURIComponent(batchId) + '/download';
+      const response = await fetch(API + endpoint, { headers: authHeaders() });
+      if (!response.ok) throw new Error('ZIP 下载失败：HTTP ' + response.status);
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = batchId + '.zip';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'ZIP 下载失败');
+    } finally {
+      setBatchDownloading(false);
+    }
+  }
+
+  const batchStatus = batchId ? job?.batch_exports?.[batchId] : undefined;
 
   return (
     <main className="min-h-screen bg-[#0a0b10] text-white">
@@ -266,6 +332,56 @@ export default function VideoRepurposingPage() {
                 </div>)}
             </div>
           )}
+
+          {job?.status === 'ready' && job.clips.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-sky-400/20 bg-sky-400/[0.05] p-4">
+              <div className="flex items-center gap-3">
+                <label className="flex cursor-pointer items-center gap-2 text-sm text-white/80">
+                  <input
+                    type="checkbox"
+                    checked={selectedClipIds.length === job.clips.length}
+                    onChange={(event) => setSelectedClipIds(
+                      event.target.checked ? job.clips.map((clip) => clip.clip_id) : []
+                    )}
+                  />
+                  全选
+                </label>
+                <span className="text-xs text-white/50">
+                  已选择 {selectedClipIds.length} / {job.clips.length}
+                </span>
+              </div>
+              <button
+                type="button"
+                disabled={selectedClipIds.length === 0 || batchSubmitting || batchStatus?.status === 'running'}
+                onClick={() => void submitBatch()}
+                className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-medium text-black disabled:opacity-40"
+              >
+                {batchSubmitting ? '正在提交…' : '批量生成 ZIP'}
+              </button>
+            </div>
+          )}
+          {batchStatus && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-4">
+              <div className="text-sm">
+                <div className="font-medium">批量导出：{batchStatus.status}</div>
+                <div className="mt-1 text-xs text-white/50">
+                  {batchStatus.completed} / {batchStatus.total} 条已处理
+                </div>
+                {batchStatus.error && <div className="mt-2 text-red-300">{batchStatus.error}</div>}
+              </div>
+              {batchStatus.status === 'completed' && (
+                <button
+                  type="button"
+                  disabled={batchDownloading}
+                  onClick={() => void downloadBatch()}
+                  className="rounded-lg border border-sky-400/40 px-4 py-2 text-sm text-sky-300"
+                >
+                  {batchDownloading ? '下载中…' : '下载 ZIP'}
+                </button>
+              )}
+            </div>
+          )}
+
           {job?.status === 'ready' && job.clips.length === 0 &&
             <p className="rounded-xl border border-white/10 p-8 text-center text-sm text-white/50">没有找到符合时长与证据要求的片段。</p>}
           {job?.clips?.map((clip) =>
@@ -279,6 +395,19 @@ export default function VideoRepurposingPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <label className="flex cursor-pointer items-center gap-2 text-xs text-white/70">
+                    <input
+                      type="checkbox"
+                      aria-label={'选择片段：' + clip.title}
+                      checked={selectedClipIds.includes(clip.clip_id)}
+                      onChange={(event) => setSelectedClipIds((previous) =>
+                        event.target.checked
+                          ? Array.from(new Set([...previous, clip.clip_id]))
+                          : previous.filter((id) => id !== clip.clip_id)
+                      )}
+                    />
+                    选择
+                  </label>
                   {previewUrl && (
                     <button
                       type="button"
