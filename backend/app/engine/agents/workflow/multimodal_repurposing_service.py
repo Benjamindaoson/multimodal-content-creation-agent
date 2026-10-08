@@ -10,9 +10,12 @@ import asyncio
 import json
 import logging
 import math
+import os
+import zipfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 import httpx
 
@@ -208,6 +211,7 @@ class VideoRepurposingService:
         self.active: Dict[str, asyncio.Task] = {}
         self.lock = asyncio.Lock()
         self.export_locks: Dict[str, asyncio.Lock] = {}
+        self.batch_tasks: Dict[str, asyncio.Task] = {}
 
     async def submit(self, owner_id: str, source: Path, objective: str) -> str:
         job_id = source.parent.name
@@ -224,6 +228,7 @@ class VideoRepurposingService:
             "transcript": [],
             "clips": [],
             "exports": {},
+            "batch_exports": {},
             "metrics": {"source_bytes": source.stat().st_size},
         }
         await self.store.save(state)
@@ -460,8 +465,8 @@ class VideoRepurposingService:
             )
 
     async def export(self, job_id: str, clip_id: str) -> Path:
-        key = f"{job_id}:{clip_id}"
-        lock = self.export_locks.setdefault(key, asyncio.Lock())
+        # Serialize state_json updates across clip and batch exports of a job.
+        lock = self.export_locks.setdefault(job_id, asyncio.Lock())
         async with lock:
             state = await self.store.load(job_id)
             if state is None:
@@ -490,6 +495,98 @@ class VideoRepurposingService:
             }
             await self.store.save(state)
             return destination
+
+    async def submit_batch_export(self, job_id: str, clip_ids: List[str]) -> str:
+        if not 1 <= len(clip_ids) <= 30 or len(set(clip_ids)) != len(clip_ids):
+            raise ValueError("select 1-30 unique clip IDs")
+        lock = self.export_locks.setdefault(job_id, asyncio.Lock())
+        async with lock:
+            state = await self.store.load(job_id)
+            if state is None:
+                raise KeyError(job_id)
+            if state["status"] != "ready" or not state["metrics"].get("has_video"):
+                raise ValueError("video analysis is not ready for export")
+            available = {clip["clip_id"] for clip in state["clips"]}
+            if not set(clip_ids).issubset(available):
+                raise ValueError("selected clip IDs are not in this job")
+            batches = state.setdefault("batch_exports", {})
+            if any(
+                value["status"] in {"queued", "running"}
+                for value in batches.values()
+            ):
+                raise ValueError("an export batch is already in progress")
+            batch_id = f"batch_{uuid4().hex[:16]}"
+            batches[batch_id] = {
+                "status": "queued",
+                "total": len(clip_ids),
+                "completed": 0,
+                "clip_ids": list(clip_ids),
+            }
+            await self.store.save(state)
+        task = asyncio.create_task(
+            self._run_batch_export(job_id, batch_id),
+            name=f"repurposing-batch:{batch_id}",
+        )
+        self.batch_tasks[batch_id] = task
+        task.add_done_callback(lambda done, key=batch_id: self._finish_batch(key, done))
+        return batch_id
+
+    def _finish_batch(self, batch_id: str, task: asyncio.Task) -> None:
+        if self.batch_tasks.get(batch_id) is task:
+            self.batch_tasks.pop(batch_id, None)
+        if not task.cancelled() and task.exception() is not None:
+            logger.error("repurposing batch %s crashed: %s", batch_id, task.exception())
+
+    @staticmethod
+    def _make_zip(destination: Path, files: List[tuple[str, Path]]) -> int:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        temporary = destination.with_suffix(".partial")
+        try:
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED) as bundle:
+                for clip_id, path in files:
+                    bundle.write(path, arcname=f"{clip_id}.mp4")
+            os.replace(temporary, destination)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return destination.stat().st_size
+
+    async def _run_batch_export(self, job_id: str, batch_id: str) -> None:
+        started = time.monotonic()
+        try:
+            state = await self.store.load(job_id)
+            if state is None:
+                raise KeyError(job_id)
+            selected = list(state["batch_exports"][batch_id]["clip_ids"])
+            await self._update_batch(job_id, batch_id, status="running")
+            files: List[tuple[str, Path]] = []
+            for clip_id in selected:
+                path = await self.export(job_id, clip_id)
+                files.append((clip_id, path))
+                await self._update_batch(
+                    job_id, batch_id, completed=len(files)
+                )
+            archive = (
+                Path(state["source_path"]).parent / "exports" / f"{batch_id}.zip"
+            )
+            size = await asyncio.to_thread(self._make_zip, archive, files)
+            await self._update_batch(
+                job_id, batch_id, status="completed", bytes=size,
+                elapsed_seconds=round(time.monotonic() - started, 3),
+            )
+        except Exception as exc:
+            logger.exception("repurposing batch %s failed", batch_id)
+            await self._update_batch(
+                job_id, batch_id, status="failed", error=str(exc)[:300],
+            )
+
+    async def _update_batch(self, job_id: str, batch_id: str, **changes: Any) -> None:
+        lock = self.export_locks.setdefault(job_id, asyncio.Lock())
+        async with lock:
+            state = await self.store.load(job_id)
+            if state is None:
+                raise KeyError(job_id)
+            state["batch_exports"][batch_id].update(changes)
+            await self.store.save(state)
 
 
 _service: Optional[VideoRepurposingService] = None
