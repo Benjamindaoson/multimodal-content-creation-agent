@@ -26,6 +26,7 @@ from .multimodal_repurposing import (
     export_clip,
     format_window,
     normalize_segments,
+    parse_ffmpeg_segment_manifest,
     run_command,
     transcript_windows,
     validated_candidates,
@@ -285,14 +286,18 @@ class VideoRepurposingService:
         chunk_dir = job_dir / "audio_chunks"
         chunk_dir.mkdir(exist_ok=True)
         marker = chunk_dir / ".complete"
+        manifest = chunk_dir / "segments.csv"
         files = sorted(chunk_dir.glob("chunk_*.mp3"))
-        # Never reuse a partial extraction left by a killed FFmpeg process.
+        # A complete marker is written only after FFmpeg and manifest checks
+        # succeed. A crashed extraction never leaves reusable partial chunks.
         if (
             not marker.is_file()
+            or not manifest.is_file()
             or not files
-            or any(not f.stat().st_size for f in files)
+            or any(not item.stat().st_size for item in files)
         ):
             marker.unlink(missing_ok=True)
+            manifest.unlink(missing_ok=True)
             for stale in files:
                 stale.unlink()
             await run_command(
@@ -313,39 +318,22 @@ class VideoRepurposingService:
                 "segment",
                 "-segment_time",
                 "600",
+                "-segment_list",
+                str(manifest),
+                "-segment_list_type",
+                "csv",
                 "-reset_timestamps",
                 "1",
                 str(chunk_dir / "chunk_%04d.mp3"),
                 timeout=1800.0,
             )
             files = sorted(chunk_dir.glob("chunk_*.mp3"))
-            if not files or any(not f.stat().st_size for f in files):
+            if not files or any(not item.stat().st_size for item in files):
                 raise RuntimeError("FFmpeg produced no complete audio chunks")
-            marker.write_text("complete\n", encoding="utf-8")
-        if not files:
-            raise RuntimeError("FFmpeg produced no audio chunks")
-        offsets: List[tuple[Path, float]] = []
-        offset = 0.0
-        for path in files:
-            result = json.loads(
-                await run_command(
-                    settings.FFPROBE_BIN,
-                    "-v",
-                    "error",
-                    "-show_entries",
-                    "format=duration",
-                    "-of",
-                    "json",
-                    str(path),
-                    timeout=60.0,
-                )
-            )
-            duration = float(result["format"]["duration"])
-            if not math.isfinite(duration) or duration <= 0:
-                raise ValueError("invalid audio chunk duration")
-            offsets.append((path, offset))
-            offset += duration
-        return offsets
+            offsets = parse_ffmpeg_segment_manifest(manifest, files)
+            marker.write_text("complete\\n", encoding="utf-8")
+            return offsets
+        return parse_ffmpeg_segment_manifest(manifest, files)
 
     async def _run(self, job_id: str) -> None:
         state = await self.store.load(job_id)
