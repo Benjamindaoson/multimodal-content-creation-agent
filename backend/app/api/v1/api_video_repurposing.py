@@ -39,8 +39,15 @@ def _public_state(state: dict) -> dict:
     return {
         key: state.get(key)
         for key in (
-            "job_id", "status", "stage", "progress", "error",
-            "clips", "exports", "metrics", "objective",
+            "job_id",
+            "status",
+            "stage",
+            "progress",
+            "error",
+            "clips",
+            "exports",
+            "metrics",
+            "objective",
         )
     }
 
@@ -88,9 +95,7 @@ async def upload_job(
 
 
 @router.get("/jobs/{job_id}")
-async def get_job(
-    job_id: str, current_user: User = Depends(get_current_active_user)
-):
+async def get_job(job_id: str, current_user: User = Depends(get_current_active_user)):
     return _public_state(await _get_owned(job_id, current_user))
 
 
