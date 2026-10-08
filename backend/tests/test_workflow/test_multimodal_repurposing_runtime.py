@@ -94,11 +94,13 @@ async def test_resume_reuses_completed_asr_chunks_after_llm_failure(
         store=store, transcriber=asr, planner=planner
     )
     monkeypatch.setattr(
-        service, "_probe",
+        service,
+        "_probe",
         AsyncMock(return_value={"duration": 50.0, "has_video": True}),
     )
     monkeypatch.setattr(
-        service, "_chunks",
+        service,
+        "_chunks",
         AsyncMock(
             return_value=[
                 (Path("chunk_0.mp3"), 0.0),
@@ -150,9 +152,7 @@ async def test_export_rejects_unknown_clip_without_media_execution(tmp_path):
     state = fake_state(source)
     state["status"] = "ready"
     state["metrics"]["has_video"] = True
-    state["clips"] = [
-        {"clip_id": "correct", "start": 0.0, "end": 30.0}
-    ]
+    state["clips"] = [{"clip_id": "correct", "start": 0.0, "end": 30.0}]
     store = MemoryStore(state)
     service = runtime.VideoRepurposingService(store=store)
     with pytest.raises(KeyError):
