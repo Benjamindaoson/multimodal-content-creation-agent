@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: '/control-center', label: '控制中心' },
   { href: '/trend-radar', label: '热点雷达' },
   { href: '/publish', label: '发布管理' },
+  { href: '/video-repurposing', label: '直播切片' },
 ];
 
 export function TopNav() {

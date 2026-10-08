@@ -61,3 +61,7 @@ usage, cache hits, peak memory and business adoption rates are **not** measured
 by this initial endpoint and must not be claimed in a résumé. Tests use mocks;
 run real end-to-end jobs with your own credentials and licensed media to
 validate quality and measured latency.
+
+## Frontend
+
+The independent user interface is located at `/video-repurposing`. It uses the same browser JWT login token as the existing publish page (stored under `localStorage.token`). The UI polls the authenticated task endpoint, supports resume, and exports one selected clip at a time. Run the Next.js frontend with `NEXT_PUBLIC_API_URL` pointing at the FastAPI backend. Client-side FFmpeg.wasm optimization and multi-select batch exports remain future work.

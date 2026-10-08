@@ -20,6 +20,12 @@ export default function Home() {
             功能控制中心
           </Link>
           <Link
+            href="/video-repurposing"
+            className="rounded-md bg-sky-600 px-6 py-3 text-sm font-medium text-white hover:bg-sky-500"
+          >
+            直播智能切片
+          </Link>
+          <Link
             href="/login"
             className="rounded-md bg-primary px-6 py-3 text-sm font-medium text-primary-foreground hover:bg-primary/90"
           >
