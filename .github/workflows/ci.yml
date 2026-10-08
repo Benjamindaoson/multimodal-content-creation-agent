@@ -92,6 +92,11 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-test.txt
 
+      - name: Check media integration prerequisites
+        run: |
+          ffmpeg -version
+          ffprobe -version
+
       - name: Run multimodal production tests
         run: |
           cd backend
