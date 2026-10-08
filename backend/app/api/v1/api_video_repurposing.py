@@ -9,6 +9,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from app.api.deps import get_current_active_user
 from app.core.config import get_settings
@@ -46,6 +47,7 @@ def _public_state(state: dict) -> dict:
             "error",
             "clips",
             "exports",
+            "batch_exports",
             "metrics",
             "objective",
         )
@@ -148,6 +150,46 @@ async def stream_job(
         updates(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+class BatchExportRequest(BaseModel):
+    clip_ids: list[str] = Field(min_length=1, max_length=30)
+
+
+@router.post("/jobs/{job_id}/exports/batch", status_code=202)
+async def export_batch(
+    job_id: str,
+    request: BatchExportRequest,
+    current_user: User = Depends(get_current_active_user),
+):
+    await _get_owned(job_id, current_user)
+    try:
+        batch_id = await get_video_repurposing_service().submit_batch_export(
+            job_id, request.clip_ids
+        )
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Job not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"job_id": job_id, "batch_id": batch_id, "status": "queued"}
+
+
+@router.get("/jobs/{job_id}/exports/batch/{batch_id}/download")
+async def download_batch(
+    job_id: str,
+    batch_id: str,
+    current_user: User = Depends(get_current_active_user),
+):
+    state = await _get_owned(job_id, current_user)
+    info = state.get("batch_exports", {}).get(batch_id)
+    if not info or info.get("status") != "completed":
+        raise HTTPException(status_code=404, detail="Batch archive is not ready")
+    path = Path(state["source_path"]).parent / "exports" / f"{batch_id}.zip"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Batch archive is missing")
+    return FileResponse(
+        path, media_type="application/zip", filename=f"{batch_id}.zip"
     )
 
 
