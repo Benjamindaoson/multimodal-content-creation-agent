@@ -284,8 +284,13 @@ class VideoRepurposingService:
         settings = get_settings()
         chunk_dir = job_dir / "audio_chunks"
         chunk_dir.mkdir(exist_ok=True)
+        marker = chunk_dir / ".complete"
         files = sorted(chunk_dir.glob("chunk_*.mp3"))
-        if not files:
+        # Never reuse a partial extraction left by a killed FFmpeg process.
+        if not marker.is_file() or not files or any(not f.stat().st_size for f in files):
+            marker.unlink(missing_ok=True)
+            for stale in files:
+                stale.unlink()
             await run_command(
                 settings.FFMPEG_BIN,
                 "-nostdin",
@@ -310,6 +315,9 @@ class VideoRepurposingService:
                 timeout=1800.0,
             )
             files = sorted(chunk_dir.glob("chunk_*.mp3"))
+            if not files or any(not f.stat().st_size for f in files):
+                raise RuntimeError("FFmpeg produced no complete audio chunks")
+            marker.write_text("complete\n", encoding="utf-8")
         if not files:
             raise RuntimeError("FFmpeg produced no audio chunks")
         offsets: List[tuple[Path, float]] = []
@@ -363,6 +371,7 @@ class VideoRepurposingService:
                     item.to_dict() for item in normalize_segments(result, offset=offset)
                 ]
 
+            asr_started = time.monotonic()
             pending = [
                 asyncio.create_task(transcribe_one(i, path, offset))
                 for i, (path, offset) in enumerate(chunks)
@@ -383,6 +392,7 @@ class VideoRepurposingService:
                 if pending:
                     await asyncio.gather(*pending, return_exceptions=True)
 
+            state["metrics"]["asr_seconds"] = round(time.monotonic() - asr_started, 3)
             segments = [
                 TranscriptSegment(**entry)
                 for i in range(len(chunks))
@@ -405,6 +415,7 @@ class VideoRepurposingService:
                 async with llm_limit:
                     return str(index), await planner.analyze(window, state["objective"])
 
+            llm_started = time.monotonic()
             analysis = [
                 asyncio.create_task(analyze_one(i, window))
                 for i, window in enumerate(windows)
@@ -439,6 +450,7 @@ class VideoRepurposingService:
                     "llm_windows": len(windows),
                     "candidate_count": len(proposals),
                     "accepted_clip_count": len(clips),
+                    "llm_seconds": round(time.monotonic() - llm_started, 3),
                     "elapsed_seconds": round(time.monotonic() - started, 3),
                 }
             )
