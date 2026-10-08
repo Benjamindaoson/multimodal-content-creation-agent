@@ -287,7 +287,11 @@ class VideoRepurposingService:
         marker = chunk_dir / ".complete"
         files = sorted(chunk_dir.glob("chunk_*.mp3"))
         # Never reuse a partial extraction left by a killed FFmpeg process.
-        if not marker.is_file() or not files or any(not f.stat().st_size for f in files):
+        if (
+            not marker.is_file()
+            or not files
+            or any(not f.stat().st_size for f in files)
+        ):
             marker.unlink(missing_ok=True)
             for stale in files:
                 stale.unlink()
