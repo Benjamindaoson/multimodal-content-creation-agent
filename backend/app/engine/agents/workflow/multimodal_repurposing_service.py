@@ -183,7 +183,12 @@ class RepurposingClipPlanner:
     def _within_window(clip: Dict[str, Any], start: float, end: float) -> bool:
         try:
             a, b = float(clip["start"]), float(clip["end"])
-            return math.isfinite(a) and math.isfinite(b) and a >= start - 0.2 and b <= end + 0.2
+            return (
+                math.isfinite(a)
+                and math.isfinite(b)
+                and a >= start - 0.2
+                and b <= end + 0.2
+            )
         except (KeyError, ValueError, TypeError):
             return False
 
@@ -253,8 +258,15 @@ class VideoRepurposingService:
         payload = json.loads(
             await run_command(
                 settings.FFPROBE_BIN,
-                "-v", "error", "-show_entries", "format=duration",
-                "-show_streams", "-of", "json", str(source), timeout=120.0,
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-show_streams",
+                "-of",
+                "json",
+                str(source),
+                timeout=120.0,
             )
         )
         duration = float(payload.get("format", {}).get("duration") or 0)
@@ -276,11 +288,26 @@ class VideoRepurposingService:
         if not files:
             await run_command(
                 settings.FFMPEG_BIN,
-                "-nostdin", "-y", "-i", str(source),
-                "-map", "0:a:0", "-ac", "1", "-ar", "16000", "-b:a", "48k",
-                "-f", "segment", "-segment_time", "600",
-                "-reset_timestamps", "1",
-                str(chunk_dir / "chunk_%04d.mp3"), timeout=1800.0,
+                "-nostdin",
+                "-y",
+                "-i",
+                str(source),
+                "-map",
+                "0:a:0",
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-b:a",
+                "48k",
+                "-f",
+                "segment",
+                "-segment_time",
+                "600",
+                "-reset_timestamps",
+                "1",
+                str(chunk_dir / "chunk_%04d.mp3"),
+                timeout=1800.0,
             )
             files = sorted(chunk_dir.glob("chunk_*.mp3"))
         if not files:
@@ -290,9 +317,15 @@ class VideoRepurposingService:
         for path in files:
             result = json.loads(
                 await run_command(
-                    settings.FFPROBE_BIN, "-v", "error",
-                    "-show_entries", "format=duration", "-of", "json",
-                    str(path), timeout=60.0,
+                    settings.FFPROBE_BIN,
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "format=duration",
+                    "-of",
+                    "json",
+                    str(path),
+                    timeout=60.0,
                 )
             )
             duration = float(result["format"]["duration"])
@@ -370,9 +403,7 @@ class VideoRepurposingService:
 
             async def analyze_one(index: int, window: List[TranscriptSegment]):
                 async with llm_limit:
-                    return str(index), await planner.analyze(
-                        window, state["objective"]
-                    )
+                    return str(index), await planner.analyze(window, state["objective"])
 
             analysis = [
                 asyncio.create_task(analyze_one(i, window))
@@ -419,9 +450,7 @@ class VideoRepurposingService:
         except Exception as exc:
             # Preserve every completed ASR chunk / LLM window for resume.
             logger.exception("long-video repurposing failed for job %s", job_id)
-            state["metrics"]["elapsed_seconds"] = round(
-                time.monotonic() - started, 3
-            )
+            state["metrics"]["elapsed_seconds"] = round(time.monotonic() - started, 3)
             await self._update(
                 state, status="failed", stage="failed", error=str(exc)[:500]
             )
@@ -437,9 +466,7 @@ class VideoRepurposingService:
                 raise ValueError("analysis is not ready")
             if not state["metrics"].get("has_video"):
                 raise ValueError("source has no video stream")
-            clip = next(
-                (c for c in state["clips"] if c["clip_id"] == clip_id), None
-            )
+            clip = next((c for c in state["clips"] if c["clip_id"] == clip_id), None)
             if clip is None:
                 raise KeyError(clip_id)
             destination = (
@@ -454,7 +481,8 @@ class VideoRepurposingService:
                     ffmpeg_bin=get_settings().FFMPEG_BIN,
                 )
             state["exports"][clip_id] = {
-                "bytes": destination.stat().st_size, "status": "completed"
+                "bytes": destination.stat().st_size,
+                "status": "completed",
             }
             await self.store.save(state)
             return destination

@@ -47,9 +47,7 @@ def normalize_segments(
             or end <= start
         ):
             continue
-        cleaned.append(
-            TranscriptSegment(round(start, 3), round(end, 3), text)
-        )
+        cleaned.append(TranscriptSegment(round(start, 3), round(end, 3), text))
     return sorted(cleaned, key=lambda s: (s.start, s.end))
 
 
@@ -93,9 +91,7 @@ def transcript_windows(
 
 
 def format_window(window: Sequence[TranscriptSegment]) -> str:
-    return "\n".join(
-        f"[{s.start:.3f}-{s.end:.3f}] {s.text}" for s in window
-    )
+    return "\n".join(f"[{s.start:.3f}-{s.end:.3f}] {s.text}" for s in window)
 
 
 def _intersection(a_start: float, a_end: float, b_start: float, b_end: float) -> float:
@@ -130,9 +126,7 @@ def validated_candidates(
         if end - start < min_seconds or end - start > max_seconds:
             continue
         evidence = [
-            s.text
-            for s in segments
-            if _intersection(start, end, s.start, s.end) > 0
+            s.text for s in segments if _intersection(start, end, s.start, s.end) > 0
         ]
         excerpt = " ".join(evidence).strip()
         if len(excerpt) < 12:
@@ -199,11 +193,30 @@ async def export_clip(
         raise ValueError("invalid source or clip time range")
     destination.parent.mkdir(parents=True, exist_ok=True)
     await run_command(
-        ffmpeg_bin, "-nostdin", "-y", "-ss", f"{start:.3f}",
-        "-i", str(source), "-t", f"{end - start:.3f}",
-        "-map", "0:v:0", "-map", "0:a:0?",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
-        "-c:a", "aac", "-movflags", "+faststart", str(destination),
+        ffmpeg_bin,
+        "-nostdin",
+        "-y",
+        "-ss",
+        f"{start:.3f}",
+        "-i",
+        str(source),
+        "-t",
+        f"{end - start:.3f}",
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "23",
+        "-c:a",
+        "aac",
+        "-movflags",
+        "+faststart",
+        str(destination),
     )
     if not destination.is_file() or destination.stat().st_size == 0:
         raise RuntimeError("FFmpeg produced no clip")
