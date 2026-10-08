@@ -183,3 +183,34 @@ async def test_export_creates_once_and_checkpoints(tmp_path, monkeypatch):
     assert first == second
     assert len(calls) == 1
     assert store.state["exports"]["clip-1"]["bytes"] == 8
+
+
+@pytest.mark.asyncio
+async def test_incomplete_chunk_extraction_is_rebuilt(tmp_path, monkeypatch):
+    chunk_dir = tmp_path / "audio_chunks"
+    chunk_dir.mkdir()
+    stale = chunk_dir / "chunk_0000.mp3"
+    stale.write_bytes(b"partial")
+    calls = []
+
+    async def fake_run(*args, **kwargs):
+        if args[0] == "ffmpeg":
+            calls.append("encode")
+            stale.write_bytes(b"complete-audio")
+            return ""
+        return '{"format": {"duration": "15.0"}}'
+
+    monkeypatch.setattr(runtime, "run_command", fake_run)
+    monkeypatch.setattr(
+        runtime,
+        "get_settings",
+        lambda: SimpleNamespace(FFMPEG_BIN="ffmpeg", FFPROBE_BIN="ffprobe"),
+    )
+    service = runtime.VideoRepurposingService(store=MemoryStore(fake_state(tmp_path)))
+    first = await service._chunks(tmp_path / "source.mp4", tmp_path)
+    second = await service._chunks(tmp_path / "source.mp4", tmp_path)
+
+    assert calls == ["encode"]
+    assert first == second
+    assert first[0][1] == 0.0
+    assert (chunk_dir / ".complete").is_file()
