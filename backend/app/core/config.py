@@ -129,6 +129,15 @@ class Settings(BaseSettings):
     FFMPEG_BIN: str = Field(default="ffmpeg", env="FFMPEG_BIN")
     FFPROBE_BIN: str = Field(default="ffprobe", env="FFPROBE_BIN")
 
+    # Long-video repurposing (separate from generated-content production)
+    GROQ_API_KEY: Optional[str] = Field(default=None, env="GROQ_API_KEY")
+    GROQ_ASR_MODEL: str = Field(default="whisper-large-v3-turbo", env="GROQ_ASR_MODEL")
+    GROQ_ASR_CONCURRENCY: int = Field(default=3, ge=1, le=6)
+    VIDEO_REPURPOSING_LLM_CONCURRENCY: int = Field(default=2, ge=1, le=4)
+    VIDEO_REPURPOSING_MAX_UPLOAD_BYTES: int = Field(
+        default=3 * 1024**3, ge=1
+    )
+
     # TikTok Content Posting / Display API
     TIKTOK_CONTENT_POSTING_ENABLED: bool = Field(
         default=False,

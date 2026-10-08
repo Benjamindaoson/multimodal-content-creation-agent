@@ -1,0 +1,30 @@
+name: Video Repurposing UI Typecheck
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'frontend/app/video-repurposing/**'
+      - '.github/workflows/video-repurposing-ui.yml'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Typecheck isolated video studio
+        working-directory: frontend
+        run: >
+          npx tsc --noEmit --strict --skipLibCheck
+          --target es2020 --module esnext --moduleResolution bundler
+          --jsx react-jsx --esModuleInterop
+          --lib dom,dom.iterable,es2020
+          app/video-repurposing/page.tsx

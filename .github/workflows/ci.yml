@@ -30,12 +30,12 @@ jobs:
       - name: Run Ruff
         run: |
           cd backend
-          ruff check             app/engine/agents/workflow/multimodal_*.py             app/api/v1/api_multimodal_production.py             app/models/multimodal_production.py             tests/test_workflow/test_multimodal_*.py             scripts/testing/live_*.py             --output-format=github
+          ruff check             app/engine/agents/workflow/multimodal_*.py             app/api/v1/api_multimodal_production.py             app/api/v1/api_video_repurposing.py             app/models/multimodal_production.py             app/models/video_repurposing.py             tests/test_workflow/test_multimodal_*.py             scripts/testing/live_*.py             --output-format=github
 
       - name: Run Black
         run: |
           cd backend
-          black --check             app/engine/agents/workflow/multimodal_*.py             app/api/v1/api_multimodal_production.py             app/models/multimodal_production.py             tests/test_workflow/test_multimodal_*.py             scripts/testing/live_*.py
+          black --check --diff             app/engine/agents/workflow/multimodal_*.py             app/api/v1/api_multimodal_production.py             app/api/v1/api_video_repurposing.py             app/models/multimodal_production.py             app/models/video_repurposing.py             tests/test_workflow/test_multimodal_*.py             scripts/testing/live_*.py
 
   multimodal-test:
     name: Multimodal Slice Tests
@@ -91,6 +91,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install -r requirements-test.txt
+
+      - name: Install FFmpeg for actual media tests
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg
+          ffmpeg -version
+          ffprobe -version
 
       - name: Run multimodal production tests
         run: |
