@@ -63,6 +63,8 @@ function timestamp(value: number) {
 
 export default function VideoRepurposingPage() {
   const [file, setFile] = useState<File | null>(null);
+  // Keep preview tied to the uploaded job, not a later file selection.
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [objective, setObjective] = useState('寻找观点完整、可以独立传播的直播精彩片段');
   const [jobId, setJobId] = useState('');
   const [job, setJob] = useState<Job | null>(null);
@@ -79,16 +81,16 @@ export default function VideoRepurposingPage() {
   const [previewClip, setPreviewClip] = useState<Clip | null>(null);
 
   useEffect(() => {
-    if (!file || !['mp4', 'mov', 'webm', 'mkv'].includes(file.name.split('.').pop()?.toLowerCase() || '')) {
+    if (!sourceFile || !['mp4', 'mov', 'webm', 'mkv'].includes(sourceFile.name.split('.').pop()?.toLowerCase() || '')) {
       setPreviewUrl('');
       return;
     }
     // The browser accesses only the original user-selected file. No extra
     // multi-GB HTTP transfer or browser-side full-file conversion is needed.
-    const url = URL.createObjectURL(file);
+    const url = URL.createObjectURL(sourceFile);
     setPreviewUrl(url);
     return () => URL.revokeObjectURL(url);
-  }, [file]);
+  }, [sourceFile]);
 
   function playCandidate(clip: Clip) {
     setPreviewClip(clip);
@@ -141,6 +143,8 @@ export default function VideoRepurposingPage() {
       data.append('objective', objective);
       const result = await request('/api/v1/video-repurposing/jobs', { method: 'POST', body: data });
       setJob(null);
+      setSourceFile(file);
+      setPreviewClip(null);
       setSelectedClipIds([]);
       setBatchId('');
       window.localStorage.removeItem('last_repurposing_batch_id');
@@ -391,7 +395,7 @@ export default function VideoRepurposingPage() {
                   <h3 className="font-medium">{clip.title}</h3>
                   <p className="mt-2 font-mono text-xs text-sky-300">
                     {timestamp(clip.start)} — {timestamp(clip.end)}
-                    <span className="ml-3 text-white/40">质量评分 {Math.round(clip.score * 100)}%</span>
+                    <span className="ml-3 text-white/40">AI 推荐分 {Math.round(clip.score * 100)}%</span>
                   </p>
                 </div>
                 <div className="flex gap-2">
