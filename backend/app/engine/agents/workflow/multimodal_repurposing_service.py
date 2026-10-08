@@ -13,10 +13,8 @@ import math
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from uuid import uuid4
 
 import httpx
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.database import AsyncSessionLocal
@@ -92,7 +90,7 @@ class GroqSegmentTranscriber:
                     if not isinstance(raw, list):
                         raise ValueError("ASR did not return segment timestamps")
                     return raw
-                except (httpx.TimeoutException, httpx.TransportError) as exc:
+                except (httpx.TimeoutException, httpx.TransportError):
                     if attempt == 2:
                         raise
                     await asyncio.sleep(2**attempt)

@@ -8,29 +8,29 @@ workflow; it does not require Runway or ElevenLabs credentials.
 
 Apply the new Alembic revision before starting the API:
 
-\`\`\`bash
+```bash
 cd backend
 alembic upgrade head
-\`\`\`
+```
 
-Set \`GROQ_API_KEY\`, \`DEEPSEEK_API_KEY\`, plus optional
-\`GROQ_ASR_MODEL=whisper-large-v3-turbo\`. Set \`FFMPEG_BIN\` and
-\`FFPROBE_BIN\` if executables aren't on PATH. The API also uses the existing
-JWT auth and \`MULTIMODAL_ARTIFACT_DIR\` (make it a persistent volume).
+Set `GROQ_API_KEY`, `DEEPSEEK_API_KEY`, plus optional
+`GROQ_ASR_MODEL=whisper-large-v3-turbo`. Set `FFMPEG_BIN` and
+`FFPROBE_BIN` if executables aren't on PATH. The API also uses the existing
+JWT auth and `MULTIMODAL_ARTIFACT_DIR` (make it a persistent volume).
 
-\`\`\`bash
+```bash
 curl -X POST http://localhost:8000/api/v1/video-repurposing/jobs \
   -H "Authorization: Bearer $TOKEN" \
   -F "file=@recording.mp4" \
   -F "objective=Find self-contained product demonstrations"
-\`\`\`
+```
 
-The response returns \`job_id\`. Authenticated clients use
-\`GET /jobs/{job_id}\`, \`GET /jobs/{job_id}/transcript\`, or an authenticated
-streaming fetch of \`GET /jobs/{job_id}/events\`. To export, call
-\`POST /jobs/{job_id}/clips/{clip_id}/export\`; then follow the authenticated
+The response returns `job_id`. Authenticated clients use
+`GET /jobs/{job_id}`, `GET /jobs/{job_id}/transcript`, or an authenticated
+streaming fetch of `GET /jobs/{job_id}/events`. To export, call
+`POST /jobs/{job_id}/clips/{clip_id}/export`; then follow the authenticated
 download URL. Export re-encodes for accurate timestamps rather than promising
-keyframe-aligned \`-c copy\` cuts.
+keyframe-aligned `-c copy` cuts.
 
 ## Processing and recovery
 
@@ -42,7 +42,7 @@ keyframe-aligned \`-c copy\` cuts.
 * Clip QA rejects invalid/out-of-range timestamps, unsupported ASR spans,
   too-short/long suggestions, and near duplicates.
 * Failed tasks preserve partial ASR and LLM results. Authenticated
-  \`POST /jobs/{job_id}/resume\` reuses saved chunks/windows.
+  `POST /jobs/{job_id}/resume` reuses saved chunks/windows.
 
 **Operational boundary:** Like the pre-existing production service, background
 execution is currently process-local. Run one API worker for this feature;
