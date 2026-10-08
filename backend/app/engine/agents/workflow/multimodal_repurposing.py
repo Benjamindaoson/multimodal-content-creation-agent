@@ -69,10 +69,6 @@ def parse_ffmpeg_segment_manifest(
             if len(raw) != 3:
                 raise ValueError("invalid FFmpeg segment manifest row")
             name = Path(raw[0]).name
-            if name != raw[0] and not Path(raw[0]).is_absolute():
-                # FFmpeg may emit full output paths; only matching basenames
-                # are used, not arbitrary paths from the manifest.
-                pass
             try:
                 start, end = float(raw[1]), float(raw[2])
             except ValueError as exc:
